@@ -1,0 +1,6 @@
+export { userService } from './userService'
+export { roleService } from './roleService'
+export { permissionService } from './permissionService'
+// export { authService } from './authService'
+export { eventService } from './eventService'
+export {jenisTiketService} from './jenisTiketService'

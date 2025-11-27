@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Optional: rapikan global */
+@layer base {
+  html, body, #app { height: 100%; }
+  /* kalau mau warna dasar maroon full-bleed */
+  /* body { @apply bg-[#6e0b0b] text-white; } */
+}
