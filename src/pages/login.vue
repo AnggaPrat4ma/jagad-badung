@@ -8,21 +8,43 @@ import axios from "axios";
 const router = useRouter();
 const route = useRoute();
 
-const API_BASE_URL = "http://192.168.1.150:8000/api";
+const API_BASE_URL = "http://172.18.216.143:8000/api";
 
 const loading = ref(false);
 const errorMessage = ref("");
-const useRedirect = ref(false); // Toggle between popup/redirect
+const useRedirect = ref(false);
 
 // ✅ Check if already logged in or handle redirect result
 onMounted(async () => {
   const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+  const jwtToken = localStorage.getItem('jwtToken');
   
-  if (isAuthenticated) {
-    console.log('✅ Already logged in, redirecting...');
-    const redirect = route.query.redirect || '/dashboard';
-    router.push(redirect);
-    return;
+  // Check JWT token first
+  if (isAuthenticated && jwtToken) {
+    console.log('✅ Already logged in with JWT, verifying...');
+    
+    try {
+      // Verify JWT token with backend
+      const response = await axios.post(`${API_BASE_URL}/auth/verify-token`, {}, {
+        headers: {
+          'Authorization': `Bearer ${jwtToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        console.log('✅ JWT token valid, redirecting...');
+        const redirect = route.query.redirect || '/dashboard';
+        router.push(redirect);
+        return;
+      }
+    } catch (error) {
+      console.error('❌ JWT verification failed:', error.response?.data);
+      // Clear invalid token
+      localStorage.removeItem('jwtToken');
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('user');
+    }
   }
 
   // Handle redirect result (if using redirect method)
@@ -52,10 +74,10 @@ const handleAuthSuccess = async (result) => {
     
     const idToken = await result.user.getIdToken();
     console.log('✅ Firebase authentication successful');
-    console.log('🔑 Token obtained:', idToken.substring(0, 30) + '...');
+    console.log('🔑 Firebase Token obtained:', idToken.substring(0, 30) + '...');
 
-    // Send token to Laravel backend
-    console.log('🔹 Sending token to backend...');
+    // 🔥 Send Firebase token to backend to get JWT
+    console.log('🔹 Sending Firebase token to backend...');
     
     const response = await axios.post(`${API_BASE_URL}/auth/firebase`, {
       firebase_token: idToken,
@@ -68,32 +90,40 @@ const handleAuthSuccess = async (result) => {
 
     console.log('✅ Backend response:', response.data);
 
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Login gagal');
+    }
+
     // Extract data from response
     const data = response.data.data;
     const user = data.user;
-    const roles = data.roles;
-    const permissions = data.permissions;
+    const jwtToken = data.token; // 🔑 JWT Token from backend
+    const tokenType = data.token_type; // Bearer
+    const expiresIn = data.expires_in; // in seconds
+    const expiresAt = data.expires_at; // ISO timestamp
 
-    // Save to localStorage
+    // 💾 Save JWT token and user data to localStorage
+    localStorage.setItem("jwtToken", jwtToken); // 🔑 Save JWT token
+    localStorage.setItem("tokenType", tokenType);
+    localStorage.setItem("tokenExpiresAt", expiresAt);
     localStorage.setItem("user", JSON.stringify(user));
-    localStorage.setItem("roles", JSON.stringify(roles));
-    localStorage.setItem("permissions", JSON.stringify(permissions));
-    localStorage.setItem("firebaseToken", idToken);
+    localStorage.setItem("firebaseToken", idToken); // Keep Firebase token for reference
     localStorage.setItem("isAuthenticated", "true");
 
-    console.log('💾 User data saved to localStorage');
+    console.log('💾 Authentication data saved to localStorage');
+    console.log('🔑 JWT Token saved');
     console.log('👤 User:', user.nama);
-    console.log('🎭 Roles:', roles);
+    console.log('🎭 Roles:', user.roles);
+    console.log('🔐 Permissions:', user.permissions);
+    console.log('⏰ Token expires at:', expiresAt);
 
-    // Redirect
-    const redirect = route.query.redirect || '/dashboard';
-    console.log('🔄 Redirecting to:', redirect);
-    
     // Clear any error messages
     errorMessage.value = "";
     
     // Small delay to ensure storage is saved
     setTimeout(() => {
+      const redirect = route.query.redirect || '/dashboard';
+      console.log('🔄 Redirecting to:', redirect);
       router.push(redirect);
     }, 100);
 
@@ -103,6 +133,13 @@ const handleAuthSuccess = async (result) => {
     if (error.response) {
       console.error("Backend error details:", error.response.data);
       errorMessage.value = error.response.data.message || "Login gagal. Silakan coba lagi.";
+      
+      // Handle specific error cases
+      if (error.response.status === 403) {
+        errorMessage.value = "Akun Anda tidak aktif. Hubungi administrator.";
+      } else if (error.response.status === 401) {
+        errorMessage.value = "Token Firebase tidak valid. Silakan coba lagi.";
+      }
     } else if (error.request) {
       errorMessage.value = "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.";
     } else {
@@ -148,8 +185,6 @@ const loginWithGoogle = async () => {
     // Don't show error if user just closed the popup
     if (error.code === "auth/popup-closed-by-user") {
       console.log('ℹ️ User closed the popup');
-      // Optionally, you can show a gentle message or do nothing
-      // errorMessage.value = "Login dibatalkan.";
     } else if (error.code === "auth/popup-blocked") {
       errorMessage.value = "Popup diblokir! Menggunakan redirect method...";
       // Fallback to redirect method if popup is blocked
@@ -173,8 +208,6 @@ const loginWithRedirect = async () => {
     // This will redirect the page
     await signInWithRedirect(auth, provider);
     
-    // Code after this won't execute because page redirects
-    
   } catch (error) {
     console.error("❌ Redirect login error:", error);
     errorMessage.value = getErrorMessage(error);
@@ -182,7 +215,7 @@ const loginWithRedirect = async () => {
   }
 };
 
-// ✅ Retry login (useful for users who closed popup accidentally)
+// ✅ Retry login
 const retryLogin = () => {
   errorMessage.value = "";
   loginWithGoogle();

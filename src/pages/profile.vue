@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import axiosInstance from '../config/axios' // Import axios instance yang sudah ada
+import axiosInstance from '../config/axios'
 
 const user = ref({
   nama: '',
@@ -17,6 +17,10 @@ const imageLoadError = ref(false)
 const photoFile = ref(null)
 const photoPreview = ref(null)
 
+// ✅ Get API Base URL from environment or hardcoded
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://192.168.1.150:8000/api'
+const STORAGE_BASE_URL = API_BASE_URL.replace('/api', '') // http://192.168.1.150:8000
+
 // Get full photo URL
 const getPhotoUrl = (photoPath) => {
   if (!photoPath) return ''
@@ -28,9 +32,7 @@ const getPhotoUrl = (photoPath) => {
   
   // Jika path relatif dari backend (/storage/profiles/xxx.png)
   if (photoPath.startsWith('/storage/')) {
-    // Gunakan base URL dari axios config
-    const API_BASE_URL = 'http://192.168.1.150:8000'
-    return API_BASE_URL + photoPath
+    return STORAGE_BASE_URL + photoPath
   }
   
   return photoPath
@@ -103,7 +105,7 @@ const triggerFileInput = () => {
   }
 }
 
-// Fungsi untuk mengambil data user dari backend
+// ✅ FIXED: Fungsi untuk mengambil data user dari backend
 const fetchUserProfile = async () => {
   isLoading.value = true
   error.value = null
@@ -113,12 +115,18 @@ const fetchUserProfile = async () => {
     const response = await axiosInstance.get('/auth/me')
 
     if (response.data.success) {
+      // ✅ FIXED: Response structure sesuai AuthController
+      // Response: { success: true, data: { id_user, nama, email, ... } }
+      const userData = response.data.data
+      
       user.value = {
-        nama: response.data.data.user.nama || '',
-        email: response.data.data.user.email || '',
-        phone: response.data.data.user.phone || '',
-        photo: response.data.data.user.photo || ''
+        nama: userData.nama || '',
+        email: userData.email || '',
+        phone: userData.phone || '',
+        photo: userData.photo || ''
       }
+      
+      console.log('✅ User profile loaded:', user.value)
     }
   } catch (err) {
     error.value = err.message || 'Gagal mengambil data profil'
@@ -137,31 +145,35 @@ const toggleEdit = () => {
   isEditing.value = !isEditing.value
 }
 
+// ✅ FIXED: Fungsi save profile sesuai dengan backend
 const saveProfile = async () => {
   isSaving.value = true
   error.value = null
 
   try {
-    // Prepare data
-    let photoData = user.value.photo
+    // ✅ Prepare data sesuai backend validation
+    const updateData = {
+      nama: user.value.nama,
+      phone: user.value.phone
+    }
     
-    // If user uploaded new photo, convert to base64
+    // ✅ If user uploaded new photo, convert to base64 or URL
     if (photoFile.value) {
-      photoData = await new Promise((resolve, reject) => {
+      const photoData = await new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = (e) => resolve(e.target.result)
         reader.onerror = (e) => reject(e)
         reader.readAsDataURL(photoFile.value)
       })
+      updateData.photo = photoData
     }
     
-    const response = await axiosInstance.put('/auth/profile', {
-      nama: user.value.nama,
-      phone: user.value.phone,
-      photo: photoData
-    })
+    // ✅ Backend expects: PUT /auth/profile with { nama?, phone?, photo? }
+    const response = await axiosInstance.put('/auth/profile', updateData)
 
     if (response.data.success) {
+      console.log('✅ Profile updated:', response.data)
+      
       isEditing.value = false
       imageLoadError.value = false
       photoFile.value = null
@@ -169,16 +181,33 @@ const saveProfile = async () => {
       
       alert('✅ Profile berhasil disimpan!')
       
-      // Update data user dengan response terbaru
+      // ✅ Update local user data with response
+      // Response: { success: true, data: { id_user, nama, email, phone, photo } }
+      const updatedData = response.data.data
+      
       user.value = {
-        nama: response.data.data.nama || user.value.nama,
-        email: response.data.data.email || user.value.email,
-        phone: response.data.data.phone || user.value.phone,
-        photo: response.data.data.photo || user.value.photo
+        nama: updatedData.nama || user.value.nama,
+        email: updatedData.email || user.value.email,
+        phone: updatedData.phone || user.value.phone,
+        photo: updatedData.photo || user.value.photo
       }
+      
+      // ✅ Update localStorage user data
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}')
+      const updatedUser = {
+        ...storedUser,
+        nama: updatedData.nama,
+        phone: updatedData.phone,
+        photo: updatedData.photo
+      }
+      localStorage.setItem('user', JSON.stringify(updatedUser))
+      
+      console.log('✅ localStorage updated')
     }
   } catch (err) {
-    // Handle validation error (422)
+    console.error('Error saving profile:', err)
+    
+    // ✅ Handle validation error (422)
     if (err.status === 422) {
       const validationErrors = Object.values(err.errors || {}).flat()
       error.value = validationErrors.join(', ') || err.message
@@ -187,7 +216,6 @@ const saveProfile = async () => {
       error.value = err.message || 'Gagal menyimpan profil'
       alert('❌ ' + error.value)
     }
-    console.error('Error saving profile:', err)
   } finally {
     isSaving.value = false
   }
@@ -348,7 +376,7 @@ onMounted(() => {
           >
             <svg
               v-if="!isSaving"
-              class="w-5 h-5"
+              class="w-5 w-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

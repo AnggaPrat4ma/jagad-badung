@@ -1,10 +1,13 @@
 // src/config/axios.js
 import axios from 'axios'
-import { getFirebaseToken, logout } from '../utils/auth'
+import { getJwtToken, getFirebaseToken, logout, refreshJwtToken } from '../utils/auth'
 import router from '../router'
 
+// ✅ API Base URL - hardcoded or from environment
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://172.18.216.143:8000/api'
+
 const axiosInstance = axios.create({
-  baseURL: 'http://192.168.1.150:8000/api',
+  baseURL: API_BASE_URL,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
@@ -12,36 +15,50 @@ const axiosInstance = axios.create({
   }
 })
 
-// ✅ Request Interceptor - Inject Firebase Token
+// ✅ Request Interceptor - Inject JWT Token (with Firebase fallback)
 axiosInstance.interceptors.request.use(
   async (config) => {
     try {
-      // Get Firebase token
-      let token = await getFirebaseToken()
+      // 🔑 Priority 1: Try JWT token first
+      let token = getJwtToken()
       
-      // If no token from Firebase, try from localStorage (backup)
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+        console.log('🔹 Request with JWT token:', config.method?.toUpperCase(), config.url)
+        return config
+      }
+      
+      // 🔥 Priority 2: Try Firebase token (backward compatibility)
+      token = await getFirebaseToken()
+      
       if (!token) {
+        // Priority 3: Try from localStorage (backup)
         token = localStorage.getItem('firebaseToken')
         
         if (token) {
-          console.log('⚠️ Using token from localStorage (Firebase not ready)')
+          console.log('⚠️ Using Firebase token from localStorage')
         }
       }
       
       if (token) {
         config.headers.Authorization = `Bearer ${token}`
-        console.log('🔹 Request with token:', config.method?.toUpperCase(), config.url)
+        console.log('🔹 Request with Firebase token:', config.method?.toUpperCase(), config.url)
       } else {
         console.log('⚠️ Request without token:', config.method?.toUpperCase(), config.url)
       }
     } catch (err) {
-      console.error('❌ Failed to retrieve Firebase token:', err)
+      console.error('❌ Failed to retrieve token:', err)
       
-      // Fallback: try localStorage token
-      const fallbackToken = localStorage.getItem('firebaseToken')
-      if (fallbackToken) {
-        config.headers.Authorization = `Bearer ${fallbackToken}`
-        console.log('⚠️ Using fallback token from localStorage')
+      // Fallback: try localStorage tokens
+      const jwtToken = localStorage.getItem('jwtToken')
+      const firebaseToken = localStorage.getItem('firebaseToken')
+      
+      if (jwtToken) {
+        config.headers.Authorization = `Bearer ${jwtToken}`
+        console.log('⚠️ Using fallback JWT token from localStorage')
+      } else if (firebaseToken) {
+        config.headers.Authorization = `Bearer ${firebaseToken}`
+        console.log('⚠️ Using fallback Firebase token from localStorage')
       }
     }
     
@@ -53,7 +70,22 @@ axiosInstance.interceptors.request.use(
   }
 )
 
-// ✅ Response Interceptor - Handle Errors & Auto Logout on 401
+// ✅ Response Interceptor - Handle Errors & Auto Logout/Refresh on 401
+let isRefreshing = false
+let failedQueue = []
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token)
+    }
+  })
+  
+  failedQueue = []
+}
+
 axiosInstance.interceptors.response.use(
   (response) => {
     // Successful response
@@ -61,6 +93,8 @@ axiosInstance.interceptors.response.use(
     return response
   },
   async (error) => {
+    const originalRequest = error.config
+
     if (error.response) {
       const status = error.response.status
       const url = error.config?.url || 'unknown'
@@ -68,41 +102,64 @@ axiosInstance.interceptors.response.use(
       console.error(`❌ Response error ${status} on ${url}:`, error.response.data)
 
       // ========================================
-      // Handle 401 Unauthorized (Token Expired)
+      // Handle 401 Unauthorized (Token Expired/Invalid)
       // ========================================
       if (status === 401) {
         console.error('🔒 Unauthorized - Token expired or invalid')
         
-        // Clear all auth data from localStorage
-        localStorage.removeItem('isAuthenticated')
-        localStorage.removeItem('user')
-        localStorage.removeItem('roles')
-        localStorage.removeItem('permissions')
-        localStorage.removeItem('firebaseToken')
+        // Check if we have JWT token to refresh
+        const jwtToken = getJwtToken()
         
-        console.log('🗑️ Auth data cleared from localStorage')
-        
-        // Logout from Firebase
-        try {
-          await logout()
-          console.log('✅ Firebase logout successful')
-        } catch (logoutError) {
-          console.error('❌ Firebase logout error:', logoutError)
-        }
-        
-        // Redirect to login (only if not already on login page)
-        if (router.currentRoute.value.path !== '/login') {
-          console.log('🔄 Redirecting to login...')
-          router.push({
-            path: '/login',
-            query: { 
-              redirect: router.currentRoute.value.fullPath,
-              reason: 'session_expired'
+        if (jwtToken && !originalRequest._retry) {
+          // Try to refresh JWT token
+          if (isRefreshing) {
+            // Wait for token refresh to complete
+            return new Promise((resolve, reject) => {
+              failedQueue.push({ resolve, reject })
+            }).then(token => {
+              originalRequest.headers.Authorization = `Bearer ${token}`
+              return axiosInstance(originalRequest)
+            }).catch(err => {
+              return Promise.reject(err)
+            })
+          }
+
+          originalRequest._retry = true
+          isRefreshing = true
+
+          try {
+            console.log('🔄 Attempting to refresh JWT token...')
+            const newToken = await refreshJwtToken()
+            
+            if (newToken) {
+              console.log('✅ JWT token refreshed successfully')
+              
+              // Update authorization header
+              axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
+              originalRequest.headers.Authorization = `Bearer ${newToken}`
+              
+              processQueue(null, newToken)
+              isRefreshing = false
+              
+              // Retry original request
+              return axiosInstance(originalRequest)
+            } else {
+              throw new Error('Failed to refresh token')
             }
-          })
+          } catch (refreshError) {
+            console.error('❌ Token refresh failed:', refreshError)
+            processQueue(refreshError, null)
+            isRefreshing = false
+            
+            // Token refresh failed - logout user
+            await handleLogout()
+            return Promise.reject(new Error('Session expired. Please login again.'))
+          }
+        } else {
+          // No JWT token or already retried - logout user
+          await handleLogout()
+          return Promise.reject(new Error('Session expired. Please login again.'))
         }
-        
-        return Promise.reject(new Error('Session expired. Please login again.'))
       }
 
       // ========================================
@@ -115,7 +172,9 @@ axiosInstance.interceptors.response.use(
                        'You do not have permission to access this resource.'
         
         // Optional: Show notification to user
-        alert(message)
+        if (typeof alert !== 'undefined') {
+          alert(message)
+        }
         
         return Promise.reject(new Error(message))
       }
@@ -160,7 +219,9 @@ axiosInstance.interceptors.response.use(
                        'Server error. Please try again later.'
         
         // Optional: Show notification
-        alert(message)
+        if (typeof alert !== 'undefined') {
+          alert(message)
+        }
         
         return Promise.reject(new Error(message))
       }
@@ -186,7 +247,9 @@ axiosInstance.interceptors.response.use(
       const message = 'Network error. Please check your internet connection.'
       
       // Optional: Show notification
-      alert(message)
+      if (typeof alert !== 'undefined') {
+        alert(message)
+      }
       
       return Promise.reject(new Error(message))
     }
@@ -198,5 +261,44 @@ axiosInstance.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// ========================================
+// Helper: Handle Logout
+// ========================================
+async function handleLogout() {
+  console.log('🚪 Logging out user...')
+  
+  // Clear all auth data from localStorage
+  localStorage.removeItem('isAuthenticated')
+  localStorage.removeItem('user')
+  localStorage.removeItem('roles')
+  localStorage.removeItem('permissions')
+  localStorage.removeItem('firebaseToken')
+  localStorage.removeItem('jwtToken')
+  localStorage.removeItem('tokenType')
+  localStorage.removeItem('tokenExpiresAt')
+  
+  console.log('🗑️ Auth data cleared from localStorage')
+  
+  // Logout from Firebase
+  try {
+    await logout()
+    console.log('✅ Firebase logout successful')
+  } catch (logoutError) {
+    console.error('❌ Firebase logout error:', logoutError)
+  }
+  
+  // Redirect to login (only if not already on login page)
+  if (router.currentRoute.value.path !== '/login') {
+    console.log('🔄 Redirecting to login...')
+    router.push({
+      path: '/login',
+      query: { 
+        redirect: router.currentRoute.value.fullPath,
+        reason: 'session_expired'
+      }
+    })
+  }
+}
 
 export default axiosInstance

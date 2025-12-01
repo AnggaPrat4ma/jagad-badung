@@ -14,7 +14,7 @@ const openSidebar = () => {
   emit('toggle-sidebar')
 }
 
-// ✅ Logout function with confirmation
+// ✅ Logout function with confirmationn
 const handleLogout = async () => {
   // Ask for confirmation
   const confirmed = confirm('Are you sure you want to logout?')
