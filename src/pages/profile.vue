@@ -376,7 +376,7 @@ onMounted(() => {
           >
             <svg
               v-if="!isSaving"
-              class="w-5 w-5"
+              class="w-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
