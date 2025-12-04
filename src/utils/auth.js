@@ -6,7 +6,7 @@ import axios from 'axios';
 const auth = getAuth(app);
 
 // ✅ API Base URL - hardcoded or from environment
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://172.18.216.143:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://172.18.196.161:8000/api';
 
 /**
  * 🔑 Get JWT Token from localStorage

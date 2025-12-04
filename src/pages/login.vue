@@ -8,7 +8,7 @@ import axios from "axios";
 const router = useRouter();
 const route = useRoute();
 
-const API_BASE_URL = "http://172.18.216.143:8000/api";
+const API_BASE_URL = "http://172.18.196.161:8000/api";
 
 const loading = ref(false);
 const errorMessage = ref("");

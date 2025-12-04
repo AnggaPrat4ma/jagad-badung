@@ -11,7 +11,7 @@ import admin from '../pages/admin.vue'
 import Eomanagement from '../pages/eomanagement.vue'
 import JenisTiketManagement from '../components/jenisTiketManagement.vue'
 import debugAuth from '../pages/debugAuth.vue'
-import { getFirebaseToken } from '../utils/auth'
+import { getJwtToken, verifyJwtToken } from '../utils/auth'
 
 const routes = [
   {
@@ -30,13 +30,13 @@ const routes = [
     path: '/dashboard',
     name: 'dashboard',
     component: Dashboard,
-    meta: { requiresAuth: false }
+    meta: { requiresAuth: true }
   },
   {
     path: '/profile',
     name: 'profile',
     component: profile,
-    meta: { hideNavbar: true, requiresAuth: false }
+    meta: { hideNavbar: true, requiresAuth: true }
   },
   {
     path: '/events',
@@ -94,33 +94,32 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 })
 })
 
-// ✅ Navigation Guard
+// ✅ FIXED: Navigation Guard with JWT Token Check
 router.beforeEach(async (to, from, next) => {
   console.log('🔹 Navigating to:', to.path)
 
-  // Check if user is authenticated from localStorage
+  // ✅ Check JWT token first (priority)
+  const jwtToken = getJwtToken()
   const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true'
-  const hasUserData = localStorage.getItem('user') !== null
-  const hasFirebaseToken = localStorage.getItem('firebaseToken') !== null
+  const userDataStr = localStorage.getItem('user')
   
   console.log('🔐 Auth Check:', {
+    hasJwtToken: !!jwtToken,
     isAuthenticated,
-    hasUserData,
-    hasFirebaseToken,
+    hasUserData: !!userDataStr,
     path: to.path
   })
 
   // If route requires authentication
   if (to.meta.requiresAuth) {
-    // ✅ Simple check: If data exists in localStorage, allow access
-    if (!isAuthenticated || !hasUserData) {
-      console.log('❌ Not authenticated (no data in localStorage), redirecting to login')
+    // ✅ Check if JWT token exists
+    if (!jwtToken || !isAuthenticated || !userDataStr) {
+      console.log('❌ Not authenticated, redirecting to login')
       
       // Clear potentially corrupted data
+      localStorage.removeItem('jwtToken')
       localStorage.removeItem('isAuthenticated')
       localStorage.removeItem('user')
-      localStorage.removeItem('roles')
-      localStorage.removeItem('permissions')
       localStorage.removeItem('firebaseToken')
       
       return next({
@@ -129,41 +128,73 @@ router.beforeEach(async (to, from, next) => {
       })
     }
 
-    // ✅ Optional: Verify Firebase token is still valid
-    // Only do this check occasionally, not on every navigation
-    if (hasFirebaseToken) {
-      try {
-        const token = await getFirebaseToken()
-        
-        if (!token) {
-          console.log('⚠️ Firebase token expired, but keeping session (will refresh on API call)')
-          // Don't redirect here - let axios interceptor handle token refresh
-        } else {
-          console.log('✅ Firebase token is valid')
-        }
-      } catch (error) {
-        console.log('⚠️ Error checking Firebase token:', error.message)
-        // Don't block navigation, let axios handle it
-      }
+    // ✅ Parse user data
+    let userData
+    try {
+      userData = JSON.parse(userDataStr)
+    } catch (error) {
+      console.error('❌ Failed to parse user data:', error)
+      localStorage.clear()
+      return next('/login')
     }
 
-    // Check role-based access
+    // ✅ Check role-based access
     if (to.meta.requiresRole) {
-      const userRoles = JSON.parse(localStorage.getItem('roles') || '[]')
-      const hasRequiredRole = to.meta.requiresRole.some(role => userRoles.includes(role))
+      // Get user roles from localStorage
+      const userRoles = userData.roles || []
+      
+      console.log('🎭 Role Check:', {
+        requiredRoles: to.meta.requiresRole,
+        userRoles: userRoles,
+        userData: userData
+      })
+      
+      // Check if user has any of the required roles
+      const hasRequiredRole = to.meta.requiresRole.some(role => 
+        userRoles.includes(role)
+      )
 
       if (!hasRequiredRole) {
         console.log('❌ No required role, redirecting to dashboard')
-        alert('You do not have permission to access this page')
+        console.log('Required:', to.meta.requiresRole)
+        console.log('User has:', userRoles)
+        
+        alert(`You need one of these roles to access this page: ${to.meta.requiresRole.join(', ')}`)
         return next('/dashboard')
       }
+      
+      console.log('✅ Role check passed')
+    }
+
+    // ✅ Optional: Verify JWT token periodically (not on every navigation)
+    // Only verify if last check was more than 5 minutes ago
+    const lastTokenCheck = parseInt(localStorage.getItem('lastTokenCheck') || '0')
+    const now = Date.now()
+    const fiveMinutes = 5 * 60 * 1000
+    
+    if (now - lastTokenCheck > fiveMinutes) {
+      console.log('🔄 Verifying JWT token...')
+      
+      const isValid = await verifyJwtToken()
+      
+      if (!isValid) {
+        console.log('❌ JWT token is invalid, redirecting to login')
+        localStorage.clear()
+        return next({
+          path: '/login',
+          query: { redirect: to.fullPath, reason: 'session_expired' }
+        })
+      }
+      
+      localStorage.setItem('lastTokenCheck', now.toString())
+      console.log('✅ JWT token is valid')
     }
 
     console.log('✅ Auth check passed, proceeding to route')
   }
 
   // If route is guest only (like login page)
-  if (to.meta.guestOnly && isAuthenticated && hasUserData) {
+  if (to.meta.guestOnly && jwtToken && isAuthenticated) {
     console.log('✅ Already authenticated, redirecting to dashboard')
     return next('/dashboard')
   }
