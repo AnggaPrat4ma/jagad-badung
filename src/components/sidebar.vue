@@ -19,7 +19,7 @@ const menuItems = [
   { icon: '🎫', label: 'My Ticket', path: '/myticket' },
   { icon: 'ℹ️', label: 'About Us', path: '/aboutus' },
   { icon: '🛡️', label: 'Admin', path: '/admin' }, // ✅ ikon baru untuk admin
-  { icon: '🛡️', label: 'EO', path: '/eo' }, // ✅ ikon baru untuk admin
+  { icon: '🏢', label: 'EO', path: '/eo' }, // ✅ ikon baru untuk admin
 ]
 
 </script>

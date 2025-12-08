@@ -1,4 +1,5 @@
 <script setup>
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { logout } from '../utils/auth'
 import { useAuth } from '../composable/useAuth'
@@ -9,15 +10,35 @@ const emit = defineEmits(['toggle-sidebar'])
 // Get auth composable
 const { logout: logoutFromComposable } = useAuth()
 
+// ✅ Check if user is authenticated
+const isAuthenticated = ref(false)
+
+// ✅ Check authentication status
+const checkAuthStatus = () => {
+  const authStatus = localStorage.getItem('isAuthenticated')
+  const token = localStorage.getItem('token')
+  const user = localStorage.getItem('user')
+  
+  // User dianggap authenticated jika salah satu dari kondisi berikut terpenuhi
+  isAuthenticated.value = authStatus === 'true' || !!token || !!user
+  
+  console.log('🔍 Auth Status:', isAuthenticated.value)
+}
+
 // ✅ Open sidebar
 const openSidebar = () => {
   emit('toggle-sidebar')
 }
 
-// ✅ Logout function with confirmationn
+// ✅ Navigate to login
+const handleLogin = () => {
+  router.push('/login')
+}
+
+// ✅ Logout function with confirmation
 const handleLogout = async () => {
   // Ask for confirmation
-  const confirmed = confirm('Are you sure you want to logout?')
+  const confirmed = confirm('Apakah Anda yakin ingin logout?')
   
   if (!confirmed) {
     return
@@ -57,6 +78,9 @@ const handleLogout = async () => {
 
     console.log('✅ Logout completed, redirecting to login...')
 
+    // Update auth status
+    isAuthenticated.value = false
+
     // Redirect to login
     router.push('/login')
     
@@ -66,9 +90,23 @@ const handleLogout = async () => {
     // Force logout anyway - clear everything and redirect
     localStorage.clear()
     sessionStorage.clear()
+    isAuthenticated.value = false
     router.push('/login')
   }
 }
+
+// ✅ Check auth status on mount
+onMounted(() => {
+  checkAuthStatus()
+  
+  // Listen for storage changes (untuk sinkronisasi antar tab)
+  window.addEventListener('storage', checkAuthStatus)
+})
+
+// ✅ Watch for route changes to update auth status
+router.afterEach(() => {
+  checkAuthStatus()
+})
 </script>
 
 <template>
@@ -112,9 +150,11 @@ const handleLogout = async () => {
         </router-link>
       </div>
 
-      <!-- 🔸 Kanan: Tombol Logout -->
+      <!-- 🔸 Kanan: Tombol Login atau Logout -->
       <div class="flex items-center">
+        <!-- Tombol Logout (jika sudah login) -->
         <button
+          v-if="isAuthenticated"
           @click="handleLogout"
           class="flex items-center gap-2 rounded-full border border-[#6e0b0b]/40 px-5 py-2 text-[#6e0b0b] font-semibold hover:bg-[#6e0b0b] hover:text-white transition"
           aria-label="Logout"
@@ -133,6 +173,29 @@ const handleLogout = async () => {
             />
           </svg>
           <span>Logout</span>
+        </button>
+
+        <!-- Tombol Login (jika belum login) -->
+        <button
+          v-else
+          @click="handleLogin"
+          class="flex items-center gap-2 rounded-full border border-[#6e0b0b]/40 px-5 py-2 text-[#6e0b0b] font-semibold hover:bg-[#6e0b0b] hover:text-white transition"
+          aria-label="Login"
+        >
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+            />
+          </svg>
+          <span>Login</span>
         </button>
       </div>
     </div>

@@ -1,7 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import DashboardLayout from '../layouts/DashboardLayout.vue'
 import axiosInstance from '../config/axios.js'
 
 const route = useRoute()
@@ -39,22 +38,39 @@ const checkCanRegister = async () => {
   }
 }
 
-// Fetch event detail dari API
+// Fetch event detail dari API menggunakan slug
 const fetchEventDetail = async () => {
   try {
     loading.value = true
-    const eventId = route.params.id
-    const response = await axiosInstance.get(`/events/${eventId}`)
+    
+    const slug = route.params.slug
+    
+    console.log('📡 Fetching event with slug:', slug)
+    
+    if (!slug) {
+      error.value = 'Event identifier tidak ditemukan'
+      loading.value = false
+      return
+    }
+    
+    const response = await axiosInstance.get(`/events/${slug}`)
+    
+    console.log('✅ Event response:', response.data)
     
     if (response.data.success) {
       event.value = response.data.data
-      await fetchJenisTiket(eventId)
+      await fetchJenisTiket(event.value.id_event)
     } else {
       error.value = 'Event tidak ditemukan'
     }
   } catch (err) {
-    console.error('Error fetching event detail:', err)
-    error.value = 'Gagal memuat detail event'
+    console.error('❌ Error fetching event detail:', err)
+    
+    if (err.response?.status === 404) {
+      error.value = 'Event tidak ditemukan'
+    } else {
+      error.value = 'Gagal memuat detail event'
+    }
   } finally {
     loading.value = false
   }
@@ -83,7 +99,7 @@ const fetchJenisTiket = async (eventId) => {
 
 onMounted(async() => {
   await fetchEventDetail()
-  await checkCanRegister() // ✅ Check registration status
+  await checkCanRegister()
   loadMidtransScript()
 })
 
@@ -215,16 +231,15 @@ const decrementQuantity = () => {
   if (ticketQuantity.value > 1) ticketQuantity.value--
 }
 
+// Fungsi kembali ke halaman sebelumnya
 const goBack = () => {
-  router.push({ name: 'events' })
+  router.back()
 }
 
 const selectTicketType = (ticketType) => {
   selectedTicketType.value = ticketType
   ticketQuantity.value = 1
 }
-
-// Ganti fungsi buyTicket dengan versi yang sudah diperbaiki ini:
 
 const buyTicket = async () => {
   console.log('🎯 buyTicket called')
@@ -299,10 +314,10 @@ const buyTicket = async () => {
     } finally {
       processingOrder.value = false
     }
-    return // ✅ PENTING: harus return di sini
+    return
   }
 
-  // ✅ Validasi untuk PAID event (existing logic)
+  // ✅ Validasi untuk PAID event
   if (!selectedTicketType.value) {
     alert('Silakan pilih tipe tiket terlebih dahulu')
     return
@@ -431,329 +446,345 @@ const buyTicket = async () => {
 </script>
 
 <template>
-  <DashboardLayout>
-    <!-- Loading State -->
-    <div v-if="loading" class="flex justify-center items-center py-20">
-      <i class="fas fa-spinner fa-spin text-4xl text-[#6e0b0b]"></i>
-    </div>
-
-    <!-- Error State -->
-    <div v-else-if="error" class="text-center py-20">
-      <div class="bg-red-50 border-2 border-red-200 rounded-2xl p-8 max-w-md mx-auto">
-        <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <h3 class="text-xl font-bold text-red-800 mb-2">{{ error }}</h3>
-        <button 
-          @click="goBack"
-          class="mt-4 bg-[#6e0b0b] text-white px-6 py-2 rounded-full hover:bg-[#8b1818] transition"
-        >
-          Kembali ke Events
-        </button>
-      </div>
-    </div>
-
-    <!-- Event Detail Content -->
-    <section v-else-if="event" class="text-[#6e0b0b] max-w-6xl mx-auto">
-      <!-- Back Button -->
-      <button 
-        @click="goBack"
-        class="flex items-center gap-2 text-[#6e0b0b] hover:text-[#5a0909] font-semibold mb-6 transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
-        Kembali
-      </button>
-
-      <!-- Hero Image -->
-      <div class="bg-white rounded-3xl shadow-2xl overflow-hidden border-4 border-[#6e0b0b] mb-8">
-        <div class="relative h-96 overflow-hidden">
-          <img 
-            :src="getBannerUrl(event.banner)" 
-            :alt="event.nama_event" 
-            class="w-full h-full object-cover"
-          />
-          <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+  <div class="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50">
+    <!-- Header dengan Tombol Kembali -->
+    <header class="bg-white shadow-md sticky top-0 z-50 border-b-4 border-[#6e0b0b]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div class="flex items-center gap-4">
+          <button 
+            @click="goBack"
+            class="flex items-center gap-2 text-[#6e0b0b] hover:text-[#8b1818] font-bold transition-all hover:gap-3 group"
+          >
+            <svg class="w-6 h-6 transform group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
+            </svg>
+            <span class="text-lg">Kembali</span>
+          </button>
           
-          <!-- Status Badge -->
-          <div class="absolute top-6 right-6 bg-green-500 text-white px-6 py-3 rounded-full text-base font-bold shadow-lg flex items-center gap-2">
-            <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-            Available
-          </div>
+          <div class="h-8 w-px bg-gray-300"></div>
+          
+          <h1 class="text-xl font-black text-[#6e0b0b]">Detail Event</h1>
+        </div>
+      </div>
+    </header>
 
-          <!-- Title -->
-          <div class="absolute bottom-0 left-0 right-0 p-8">
-            <span class="inline-block bg-[#6e0b0b] text-white px-4 py-2 rounded-full text-sm font-bold mb-3">
-              {{ getKategori() }}
-            </span>
-            <h1 class="text-5xl font-black text-white">{{ event.nama_event }}</h1>
-          </div>
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-red-900">
+      <!-- Loading State -->
+      <div v-if="loading" class="flex justify-center items-center py-20">
+        <div class="text-center">
+          <i class="fas fa-spinner fa-spin text-5xl text-[#6e0b0b] mb-4"></i>
+          <p class="text-gray-600 font-medium">Memuat detail event...</p>
         </div>
       </div>
 
-      <!-- Content Grid -->
-      <div class="grid lg:grid-cols-3 gap-8">
-        <!-- Main Content -->
-        <div class="lg:col-span-2 space-y-6">
-          <!-- Description -->
-          <div class="bg-white rounded-2xl shadow-lg p-8 border-2 border-[#6e0b0b]/20">
-            <h2 class="text-2xl font-black text-[#6e0b0b] mb-4">Tentang Event</h2>
-            <p class="text-gray-700 leading-relaxed text-lg">
-              {{ event.deskripsi || 'Deskripsi event akan segera hadir.' }}
-            </p>
-          </div>
+      <!-- Error State -->
+      <div v-else-if="error" class="text-center py-20">
+        <div class="bg-red-50 border-2 border-red-200 rounded-2xl p-8 max-w-md mx-auto">
+          <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h3 class="text-xl font-bold text-red-800 mb-2">{{ error }}</h3>
+          <button 
+            @click="goBack"
+            class="mt-4 bg-[#6e0b0b] text-white px-6 py-3 rounded-full hover:bg-[#8b1818] transition font-bold"
+          >
+            Kembali
+          </button>
+        </div>
+      </div>
 
-          <!-- Event Details -->
-          <div class="bg-white rounded-2xl shadow-lg p-8 border-2 border-[#6e0b0b]/20">
-            <h2 class="text-2xl font-black text-[#6e0b0b] mb-6">Detail Event</h2>
-            <div class="space-y-4">
-              <!-- Date -->
-              <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                <div class="bg-[#6e0b0b]/10 p-3 rounded-lg">
-                  <svg class="w-6 h-6 text-[#6e0b0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500 font-medium">Tanggal</p>
-                  <p class="font-bold text-gray-800 text-lg">{{ formatDate(event.start_time) }}</p>
-                </div>
-              </div>
+      <!-- Event Detail Content -->
+      <section v-else-if="event" class="text-[#6e0b0b]">
+        <!-- Hero Image -->
+        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden border-4 border-[#6e0b0b] mb-8">
+          <div class="relative h-96 overflow-hidden">
+            <img 
+              :src="getBannerUrl(event.banner)" 
+              :alt="event.nama_event" 
+              class="w-full h-full object-cover"
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+            
+            <!-- Status Badge -->
+            <div class="absolute top-6 right-6 bg-green-500 text-white px-6 py-3 rounded-full text-base font-bold shadow-lg flex items-center gap-2">
+              <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+              Available
+            </div>
 
-              <!-- Time -->
-              <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                <div class="bg-[#6e0b0b]/10 p-3 rounded-lg">
-                  <svg class="w-6 h-6 text-[#6e0b0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500 font-medium">Waktu</p>
-                  <p class="font-bold text-gray-800 text-lg">{{ formatTime(event.start_time, event.end_time) }}</p>
-                </div>
-              </div>
-
-              <!-- Location -->
-              <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                <div class="bg-[#6e0b0b]/10 p-3 rounded-lg">
-                  <svg class="w-6 h-6 text-[#6e0b0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500 font-medium">Lokasi</p>
-                  <p class="font-bold text-gray-800 text-lg">{{ event.lokasi }}</p>
-                </div>
-              </div>
-
-              <!-- Capacity -->
-              <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                <div class="bg-[#6e0b0b]/10 p-3 rounded-lg">
-                  <svg class="w-6 h-6 text-[#6e0b0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-                <!-- <div>
-                  <p class="text-sm text-gray-500 font-medium">Kapasitas</p>
-                  <p class="font-bold text-gray-800 text-lg">{{ event.kapasitas || 'Unlimited' }} orang</p>
-                </div> -->
-              </div>
+            <!-- Title -->
+            <div class="absolute bottom-0 left-0 right-0 p-8">
+              <span class="inline-block bg-[#6e0b0b] text-white px-4 py-2 rounded-full text-sm font-bold mb-3">
+                {{ getKategori() }}
+              </span>
+              <h1 class="text-5xl font-black text-white">{{ event.nama_event }}</h1>
             </div>
           </div>
         </div>
 
-        <!-- Sidebar - Ticket Purchase -->
-        <div class="lg:col-span-1">
-          <div class="bg-white rounded-2xl shadow-2xl p-6 border-4 border-[#6e0b0b] sticky top-6">
-            <h3 class="text-xl font-black text-[#6e0b0b] mb-6">Pesan Tiket</h3>
+        <!-- Content Grid -->
+        <div class="grid lg:grid-cols-3 gap-8">
+          <!-- Main Content -->
+          <div class="lg:col-span-2 space-y-6">
+            <!-- Description -->
+            <div class="bg-white rounded-2xl shadow-lg p-8 border-2 border-[#6e0b0b]/20">
+              <h2 class="text-2xl font-black text-[#6e0b0b] mb-4">Tentang Event</h2>
+              <p class="text-gray-700 leading-relaxed text-lg">
+                {{ event.deskripsi || 'Deskripsi event akan segera hadir.' }}
+              </p>
+            </div>
 
-            <!-- Already Registered Alert -->
-            <div v-if="isFreeEvent && !canRegister && !checkingRegistration" class="mb-6 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-              <div class="flex items-start gap-3">
-                <svg class="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                  <p class="font-bold text-blue-900">Sudah Terdaftar</p>
-                  <p class="text-sm text-blue-700 mt-1">Anda sudah terdaftar untuk event ini. Lihat tiket Anda di halaman My Tickets.</p>
-                  <button 
-                    @click="$router.push({ name: 'myticket' })"
-                    class="mt-3 text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-                  >
-                    Lihat Tiket Saya
-                  </button>
+            <!-- Event Details -->
+            <div class="bg-white rounded-2xl shadow-lg p-8 border-2 border-[#6e0b0b]/20">
+              <h2 class="text-2xl font-black text-[#6e0b0b] mb-6">Detail Event</h2>
+              <div class="space-y-4">
+                <!-- Date -->
+                <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                  <div class="bg-[#6e0b0b]/10 p-3 rounded-lg">
+                    <svg class="w-6 h-6 text-[#6e0b0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p class="text-sm text-gray-500 font-medium">Tanggal</p>
+                    <p class="font-bold text-gray-800 text-lg">{{ formatDate(event.start_time) }}</p>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <!-- Checking Registration Status -->
-            <div v-if="checkingRegistration" class="mb-6 flex items-center justify-center py-4">
-              <i class="fas fa-spinner fa-spin text-xl text-[#6e0b0b] mr-2"></i>
-              <span class="text-sm text-gray-600">Memeriksa status pendaftaran...</span>
-            </div>
-            
-            <!-- Loading Tickets -->
-            <div v-if="loadingTickets" class="flex justify-center py-8">
-              <i class="fas fa-spinner fa-spin text-2xl text-[#6e0b0b]"></i>
-            </div>
+                <!-- Time -->
+                <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                  <div class="bg-[#6e0b0b]/10 p-3 rounded-lg">
+                    <svg class="w-6 h-6 text-[#6e0b0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p class="text-sm text-gray-500 font-medium">Waktu</p>
+                    <p class="font-bold text-gray-800 text-lg">{{ formatTime(event.start_time, event.end_time) }}</p>
+                  </div>
+                </div>
 
-            <!-- Ticket Types Selection -->
-            <div v-else-if="!isFreeEvent && jenisTiket.length > 0" class="mb-6">
-              <label class="block text-sm font-bold text-gray-700 mb-3">Pilih Tipe Tiket</label>
-              <div class="space-y-3">
-                <div 
-                  v-for="ticketType in jenisTiket" 
-                  :key="ticketType.id_jenis_tiket"
-                  
-                  @click="ticketType.kuota > 0 && selectTicketType(ticketType)" 
+                <!-- Location -->
+                <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                  <div class="bg-[#6e0b0b]/10 p-3 rounded-lg">
+                    <svg class="w-6 h-6 text-[#6e0b0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p class="text-sm text-gray-500 font-medium">Lokasi</p>
+                    <p class="font-bold text-gray-800 text-lg">{{ event.lokasi }}</p>
+                  </div>
+                </div>
 
-                  class="p-4 rounded-xl border-2 transition-all"
-                  :class="[
-                    ticketType.kuota <= 0 
-                      ? 'border-gray-300 bg-gray-100 cursor-not-allowed opacity-60' 
-                      : (selectedTicketType?.id_jenis_tiket === ticketType.id_jenis_tiket 
-                          ? 'cursor-pointer border-[#6e0b0b] bg-[#6e0b0b]/5' 
-                          : 'cursor-pointer border-gray-200 hover:border-[#6e0b0b]/30')
-                  ]"
-                >
-                  <div class="flex items-start justify-between mb-2">
-                    <div class="flex items-center gap-2">
-                      <!-- Radio circle -->
-                      <div 
-                        class="w-5 h-5 rounded-full border-2 flex items-center justify-center"
-                        :class="ticketType.kuota <= 0 
-                          ? 'border-gray-400' 
-                          : (selectedTicketType?.id_jenis_tiket === ticketType.id_jenis_tiket 
-                              ? 'border-[#6e0b0b]' 
-                              : 'border-gray-300')"
-                      >
-                        <div 
-                          v-if="ticketType.kuota > 0 && selectedTicketType?.id_jenis_tiket === ticketType.id_jenis_tiket"
-                          class="w-3 h-3 rounded-full bg-[#6e0b0b]"
-                        ></div>
-                      </div>
-
-                      <span class="font-bold text-gray-800">{{ ticketType.nama_tiket }}</span>
-                    </div>
-
-                    <!-- Harga atau Sold Out -->
-                    <span class="font-black"
-                      :class="ticketType.kuota <= 0 ? 'text-gray-500' : 'text-[#6e0b0b]'"
-                    >
-                      {{ ticketType.kuota <= 0 ? 'Sold Out' : formatPrice(ticketType.harga) }}
-                    </span>
+                <!-- Capacity -->
+                <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                  <div class="bg-[#6e0b0b]/10 p-3 rounded-lg">
+                    <svg class="w-6 h-6 text-[#6e0b0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p class="text-sm text-gray-500 font-medium">Kapasitas</p>
+                    <p class="font-bold text-gray-800 text-lg">{{ event.kapasitas || 'Unlimited' }} orang</p>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
 
-            <!-- No Tickets Available -->
-            <div v-else-if="!isFreeEvent && jenisTiket.length === 0" class="mb-6">
-              <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
-                <p class="text-sm text-yellow-800">Belum ada tiket tersedia untuk event ini</p>
+          <!-- Sidebar - Ticket Purchase -->
+          <div class="lg:col-span-1">
+            <div class="bg-white rounded-2xl shadow-2xl p-6 border-4 border-[#6e0b0b] sticky top-24">
+              <h3 class="text-xl font-black text-[#6e0b0b] mb-6">Pesan Tiket</h3>
+
+              <!-- Already Registered Alert -->
+              <div v-if="isFreeEvent && !canRegister && !checkingRegistration" class="mb-6 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+                <div class="flex items-start gap-3">
+                  <svg class="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p class="font-bold text-blue-900">Sudah Terdaftar</p>
+                    <p class="text-sm text-blue-700 mt-1">Anda sudah terdaftar untuk event ini. Lihat tiket Anda di halaman My Tickets.</p>
+                    <button 
+                      @click="$router.push({ name: 'myticket' })"
+                      class="mt-3 text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+                    >
+                      Lihat Tiket Saya
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <!-- Price Display -->
-            <div v-if="!isFreeEvent && selectedTicketType" class="bg-gradient-to-br from-[#6e0b0b]/10 to-[#8b1818]/10 rounded-xl p-6 mb-6 border-2 border-[#6e0b0b]/20">
-              <p class="text-sm text-gray-600 font-medium mb-2">Harga Per Tiket</p>
-              <p class="text-3xl font-black text-[#6e0b0b]">{{ displayPrice }}</p>
-            </div>
-
-            <!-- Free Event Badge -->
-            <div v-else-if="isFreeEvent" class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 mb-6 border-2 border-green-200">
-              <p class="text-sm text-green-600 font-medium mb-2">Event Gratis</p>
-              <p class="text-3xl font-black text-green-600">FREE ENTRY</p>
-            </div>
-
-            <!-- Quantity Selector -->
-            <div v-if="!isFreeEvent && selectedTicketType" class="mb-6">
-              <label class="block text-sm font-bold text-gray-700 mb-3">Jumlah Tiket</label>
-              <div class="flex items-center justify-center gap-4">
-                <button 
-                  @click="decrementQuantity"
-                  :disabled="ticketQuantity <= 1"
-                  class="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-[#6e0b0b] w-12 h-12 rounded-xl font-bold text-xl"
-                >
-                  -
-                </button>
-                <span class="text-3xl font-black text-[#6e0b0b] w-12 text-center">{{ ticketQuantity }}</span>
-                <button 
-                  @click="incrementQuantity"
-                  :disabled="ticketQuantity >= 10"
-                  class="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-[#6e0b0b] w-12 h-12 rounded-xl font-bold text-xl"
-                >
-                  +
-                </button>
+              <!-- Checking Registration Status -->
+              <div v-if="checkingRegistration" class="mb-6 flex items-center justify-center py-4">
+                <i class="fas fa-spinner fa-spin text-xl text-[#6e0b0b] mr-2"></i>
+                <span class="text-sm text-gray-600">Memeriksa status pendaftaran...</span>
               </div>
-            </div>
-
-            <!-- Total Price -->
-            <div v-if="!isFreeEvent && selectedTicketType" class="bg-gradient-to-r from-[#6e0b0b] to-[#8b1818] rounded-xl p-6 mb-6">
-              <p class="text-sm text-white/80 font-medium mb-1">Total Pembayaran</p>
-              <p class="text-3xl font-black text-white">{{ totalPrice }}</p>
-            </div>
-
-            <!-- Buy Button -->
-            <button 
-              @click="buyTicket"
-              :disabled="processingOrder || (!isFreeEvent && !selectedTicketType) || (isFreeEvent && !canRegister)"
-              class="w-full bg-gradient-to-r from-[#6e0b0b] to-[#8b1818] text-white py-4 rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all text-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-            >
-              <span v-if="processingOrder">
-                <i class="fas fa-spinner fa-spin mr-2"></i>
-                Memproses...
-              </span>
-              <span v-else-if="isFreeEvent && !canRegister">
-                Sudah Terdaftar
-              </span>
-              <span v-else>
-                {{ isFreeEvent ? '🎉 Daftar Gratis' : '💳 Bayar Sekarang' }}
-              </span>
-            </button>
-
-            <!-- Info Text -->
-            <div class="mt-4 p-3 rounded-lg"
-              :class="isFreeEvent && !canRegister ? 'bg-blue-50 border border-blue-200' : 'bg-blue-50 border border-blue-200'"
-            >
-              <div class="flex items-start gap-2">
-                <svg class="w-5 h-5 flex-shrink-0 mt-0.5"
-                  :class="isFreeEvent && !canRegister ? 'text-blue-600' : 'text-blue-600'"
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p class="text-xs"
-                  :class="isFreeEvent && !canRegister ? 'text-blue-800' : 'text-blue-800'"
-                >
-                  <span v-if="isFreeEvent && !canRegister">
-                    Anda telah terdaftar untuk event ini. Tiket dapat dilihat di halaman My Tickets.
-                  </span>
-                  <span v-else-if="isFreeEvent">
-                    Klik tombol di atas untuk mendaftar event gratis ini. Tiket akan langsung dibuat setelah pendaftaran berhasil.
-                  </span>
-                  <span v-else>
-                    Anda akan diarahkan ke halaman pembayaran Midtrans yang aman. Tiket akan dikirim setelah pembayaran berhasil.
-                  </span>
-                </p>
+              
+              <!-- Loading Tickets -->
+              <div v-if="loadingTickets" class="flex justify-center py-8">
+                <i class="fas fa-spinner fa-spin text-2xl text-[#6e0b0b]"></i>
               </div>
-            </div>
 
-            <!-- Payment Methods Info -->
-            <div v-if="!isFreeEvent" class="mt-4">
-              <p class="text-xs text-gray-500 text-center mb-2">Metode Pembayaran:</p>
-              <div class="flex flex-wrap gap-2 justify-center">
-                <span class="text-xs bg-gray-100 px-2 py-1 rounded">Transfer Bank</span>
-                <span class="text-xs bg-gray-100 px-2 py-1 rounded">GoPay</span>
-                <span class="text-xs bg-gray-100 px-2 py-1 rounded">QRIS</span>
-                <span class="text-xs bg-gray-100 px-2 py-1 rounded">Kartu Kredit</span>
+              <!-- Ticket Types Selection -->
+              <div v-else-if="!isFreeEvent && jenisTiket.length > 0" class="mb-6">
+                <label class="block text-sm font-bold text-gray-700 mb-3">Pilih Tipe Tiket</label>
+                <div class="space-y-3">
+                  <div 
+                    v-for="ticketType in jenisTiket" 
+                    :key="ticketType.id_jenis_tiket"
+                    
+                    @click="ticketType.kuota > 0 && selectTicketType(ticketType)" 
+
+                    class="p-4 rounded-xl border-2 transition-all"
+                    :class="[
+                      ticketType.kuota <= 0 
+                        ? 'border-gray-300 bg-gray-100 cursor-not-allowed opacity-60' 
+                        : (selectedTicketType?.id_jenis_tiket === ticketType.id_jenis_tiket 
+                            ? 'cursor-pointer border-[#6e0b0b] bg-[#6e0b0b]/5' 
+                            : 'cursor-pointer border-gray-200 hover:border-[#6e0b0b]/30')
+                    ]"
+                  >
+                    <div class="flex items-start justify-between mb-2">
+                      <div class="flex items-center gap-2">
+                        <!-- Radio circle -->
+                        <div 
+                          class="w-5 h-5 rounded-full border-2 flex items-center justify-center"
+                          :class="ticketType.kuota <= 0 
+                            ? 'border-gray-400' 
+                            : (selectedTicketType?.id_jenis_tiket === ticketType.id_jenis_tiket 
+                                ? 'border-[#6e0b0b]' 
+                                : 'border-gray-300')"
+                        >
+                          <div 
+                            v-if="ticketType.kuota > 0 && selectedTicketType?.id_jenis_tiket === ticketType.id_jenis_tiket"
+                            class="w-3 h-3 rounded-full bg-[#6e0b0b]"
+                          ></div>
+                        </div>
+
+                        <span class="font-bold text-gray-800">{{ ticketType.nama_tiket }}</span>
+                      </div>
+
+                      <!-- Harga atau Sold Out -->
+                      <span class="font-black"
+                        :class="ticketType.kuota <= 0 ? 'text-gray-500' : 'text-[#6e0b0b]'"
+                      >
+                        {{ ticketType.kuota <= 0 ? 'Sold Out' : formatPrice(ticketType.harga) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- No Tickets Available -->
+              <div v-else-if="!isFreeEvent && jenisTiket.length === 0" class="mb-6">
+                <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
+                  <p class="text-sm text-yellow-800">Belum ada tiket tersedia untuk event ini</p>
+                </div>
+              </div>
+
+              <!-- Price Display -->
+              <div v-if="!isFreeEvent && selectedTicketType" class="bg-gradient-to-br from-[#6e0b0b]/10 to-[#8b1818]/10 rounded-xl p-6 mb-6 border-2 border-[#6e0b0b]/20">
+                <p class="text-sm text-gray-600 font-medium mb-2">Harga Per Tiket</p>
+                <p class="text-3xl font-black text-[#6e0b0b]">{{ displayPrice }}</p>
+              </div>
+
+              <!-- Free Event Badge -->
+              <div v-else-if="isFreeEvent" class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 mb-6 border-2 border-green-200">
+                <p class="text-sm text-green-600 font-medium mb-2">Event Gratis</p>
+                <p class="text-3xl font-black text-green-600">FREE ENTRY</p>
+              </div>
+
+              <!-- Quantity Selector -->
+              <div v-if="!isFreeEvent && selectedTicketType" class="mb-6">
+                <label class="block text-sm font-bold text-gray-700 mb-3">Jumlah Tiket</label>
+                <div class="flex items-center justify-center gap-4">
+                  <button 
+                    @click="decrementQuantity"
+                    :disabled="ticketQuantity <= 1"
+                    class="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-[#6e0b0b] w-12 h-12 rounded-xl font-bold text-xl"
+                  >
+                    -
+                  </button>
+                  <span class="text-3xl font-black text-[#6e0b0b] w-12 text-center">{{ ticketQuantity }}</span>
+                  <button 
+                    @click="incrementQuantity"
+                    :disabled="ticketQuantity >= 10"
+                    class="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-[#6e0b0b] w-12 h-12 rounded-xl font-bold text-xl"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <!-- Total Price -->
+              <div v-if="!isFreeEvent && selectedTicketType" class="bg-gradient-to-r from-[#6e0b0b] to-[#8b1818] rounded-xl p-6 mb-6">
+                <p class="text-sm text-white/80 font-medium mb-1">Total Pembayaran</p>
+                <p class="text-3xl font-black text-white">{{ totalPrice }}</p>
+              </div>
+
+              <!-- Buy Button -->
+              <button 
+                @click="buyTicket"
+                :disabled="processingOrder || (!isFreeEvent && !selectedTicketType) || (isFreeEvent && !canRegister)"
+                class="w-full bg-gradient-to-r from-[#6e0b0b] to-[#8b1818] text-white py-4 rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all text-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                <span v-if="processingOrder">
+                  <i class="fas fa-spinner fa-spin mr-2"></i>
+                  Memproses...
+                </span>
+                <span v-else-if="isFreeEvent && !canRegister">
+                  Sudah Terdaftar
+                </span>
+                <span v-else>
+                  {{ isFreeEvent ? '🎉 Daftar Gratis' : '💳 Bayar Sekarang' }}
+                </span>
+              </button>
+
+              <!-- Info Text -->
+              <div class="mt-4 p-3 rounded-lg"
+                :class="isFreeEvent && !canRegister ? 'bg-blue-50 border border-blue-200' : 'bg-blue-50 border border-blue-200'"
+              >
+                <div class="flex items-start gap-2">
+                  <svg class="w-5 h-5 flex-shrink-0 mt-0.5"
+                    :class="isFreeEvent && !canRegister ? 'text-blue-600' : 'text-blue-600'"
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p class="text-xs"
+                    :class="isFreeEvent && !canRegister ? 'text-blue-800' : 'text-blue-800'"
+                  >
+                    <span v-if="isFreeEvent && !canRegister">
+                      Anda telah terdaftar untuk event ini. Tiket dapat dilihat di halaman My Tickets.
+                    </span>
+                    <span v-else-if="isFreeEvent">
+                      Klik tombol di atas untuk mendaftar event gratis ini. Tiket akan langsung dibuat setelah pendaftaran berhasil.
+                    </span>
+                    <span v-else>
+                      Anda akan diarahkan ke halaman pembayaran Midtrans yang aman. Tiket akan dikirim setelah pembayaran berhasil.
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <!-- Payment Methods Info -->
+              <div v-if="!isFreeEvent" class="mt-4">
+                <p class="text-xs text-gray-500 text-center mb-2">Metode Pembayaran:</p>
+                <div class="flex flex-wrap gap-2 justify-center">
+                  <span class="text-xs bg-gray-100 px-2 py-1 rounded">Transfer Bank</span>
+                  <span class="text-xs bg-gray-100 px-2 py-1 rounded">GoPay</span>
+                  <span class="text-xs bg-gray-100 px-2 py-1 rounded">QRIS</span>
+                  <span class="text-xs bg-gray-100 px-2 py-1 rounded">Kartu Kredit</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </section>
-  </DashboardLayout>
+      </section>
+    </main>
+  </div>
 </template>

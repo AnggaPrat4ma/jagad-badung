@@ -6,8 +6,19 @@ import axiosInstance from "../config/axios.js";
 
 const router = useRouter()
 
-const goToDetail = (id) => {
-  router.push({ name: "EventDetail", params: { id } })
+const goToDetail = (event) => {
+  console.log('🔍 Navigating to event:', event)
+  
+  // Gunakan slug jika ada, fallback ke id_event untuk backward compatibility
+  const identifier = event.slug || event.id_event
+  
+  console.log('📍 Using identifier:', identifier)
+  
+  // Navigate menggunakan slug parameter
+  router.push({ 
+    name: 'EventDetail', 
+    params: { slug: identifier } 
+  })
 }
 
 // Animasi konten
@@ -241,7 +252,7 @@ const getPriceDisplay = (event) => {
               :date="formatDate(e.start_time)"
               :kategori="getKategori(e)"
               :price="getPriceDisplay(e)"
-              @click="goToDetail(e.id_event)"
+              @click="goToDetail(e)"
             />
           </div>
         </div>

@@ -749,7 +749,7 @@ export default {
       selectedEvent: null,
       panitiaList: { owner: null, panitia: [] },
       alert: { show: false, type: '', message: '' },
-      baseURL: 'http://172.18.196.161:8000',
+      baseURL: 'http://172.18.210.102:8000',
       formData: {
         nama_event: '',
         deskripsi: '',

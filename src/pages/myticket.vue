@@ -353,17 +353,55 @@ const closeModal = () => {
   selectedTicket.value = null
 }
 
-// Download ticket
-const downloadTicket = (ticket) => {
-  const qrUrl = getQrCodeUrl(ticket.qr_code)
-  const link = document.createElement('a')
-  link.href = qrUrl
-  link.download = `Ticket-${ticket.qr_code}.png`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  
-  alert('✅ Tiket berhasil didownload!')
+// Download ticket as PDF
+const downloadTicket = async (ticket) => {
+  try {
+    console.log('📥 Downloading ticket PDF:', ticket.id_tiket)
+    
+    // Show loading indicator
+    const loadingMsg = document.createElement('div')
+    loadingMsg.innerHTML = `
+      <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                  background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); 
+                  z-index: 10000; text-align: center;">
+        <div style="width: 50px; height: 50px; border: 4px solid #e2e8f0; 
+                    border-top-color: #8d0c0c; border-radius: 50%; 
+                    animation: spin 1s linear infinite; margin: 0 auto 15px;"></div>
+        <p style="color: #1e293b; font-weight: 600;">Mengunduh tiket...</p>
+      </div>
+      <style>
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      </style>
+    `
+    document.body.appendChild(loadingMsg)
+
+    // Call API to download PDF
+    const response = await axiosInstance.get(`/tiket/${ticket.id_tiket}/download-pdf`, {
+      responseType: 'blob'
+    })
+
+    // Create blob URL and trigger download
+    const blob = new Blob([response.data], { type: 'application/pdf' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `Ticket-${ticket.qr_code}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    // Remove loading
+    document.body.removeChild(loadingMsg)
+
+    alert('✅ Tiket PDF berhasil didownload!')
+    
+  } catch (err) {
+    console.error('❌ Error downloading ticket:', err)
+    alert('❌ Gagal mendownload tiket. Silakan coba lagi.')
+  }
 }
 
 // Helper functions

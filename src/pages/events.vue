@@ -55,7 +55,7 @@
         v-for="event in filteredEvents"
         :key="event.id_event"
         class="bg-white text-gray-800 rounded-2xl shadow-lg overflow-hidden transform hover:-translate-y-1 hover:shadow-2xl transition cursor-pointer"
-        @click="goToDetail(event.id_event)"
+        @click="goToDetail(event)"
       >
         <!-- Banner -->
         <div class="relative">
@@ -132,7 +132,7 @@
             </div>
 
             <button
-              @click.stop="goToDetail(event.id_event)"
+              @click.stop="goToDetail(event)"
               class="bg-[#7A0000] hover:bg-[#9B1C1C] text-white px-5 py-2 rounded-full font-semibold transition"
             >
               Lihat Detail
@@ -272,8 +272,19 @@ const toggleMenu = () => {
   console.log('Toggle menu')
 }
 
-const goToDetail = (id) => {
-  router.push({ name: 'EventDetail', params: { id } })
+const goToDetail = (event) => {
+  console.log('🔍 Navigating to event:', event)
+  
+  // Gunakan slug jika ada, fallback ke id_event untuk backward compatibility
+  const identifier = event.slug || event.id_event
+  
+  console.log('📍 Using identifier:', identifier)
+  
+  // Navigate menggunakan slug parameter
+  router.push({ 
+    name: 'EventDetail', 
+    params: { slug: identifier } 
+  })
 }
 
 const logout = () => {

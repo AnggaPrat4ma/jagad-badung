@@ -30,7 +30,7 @@ const routes = [
     path: '/dashboard',
     name: 'dashboard',
     component: Dashboard,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: false }
   },
   {
     path: '/profile',
@@ -45,10 +45,11 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
-    path: '/events/:id',
+    path: '/events/:slug', // ✅ Changed from :id to :slug
     name: 'EventDetail',
     component: Eventdetail,
-    meta: { hideNavbar: true, requiresAuth: false }
+    meta: { hideNavbar: true, requiresAuth: false },
+    props: true // ✅ Enable props to pass slug as prop
   },
   {
     path: '/myticket',

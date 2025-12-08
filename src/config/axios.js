@@ -4,7 +4,7 @@ import { getJwtToken, getFirebaseToken, logout, refreshJwtToken } from '../utils
 import router from '../router'
 
 // ✅ API Base URL - hardcoded or from environment
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://172.18.196.161:8000/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://172.18.210.102:8000/api'
 
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
